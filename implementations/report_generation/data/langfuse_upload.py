@@ -11,14 +11,20 @@ $ python -m implementations.report_generation.data.langfuse_upload \
 
 import asyncio
 import logging
+import sys
+from pathlib import Path
 
 import click
-from aieng.agent_evals.langfuse import upload_dataset_to_langfuse
 
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
+from aieng.agent_evals.langfuse import upload_dataset_to_langfuse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
-
 
 DEFAULT_EVALUATION_DATASET_PATH = "implementations/report_generation/data/OnlineRetailReportEval.json"
 DEFAULT_EVALUATION_DATASET_NAME = "OnlineRetailReportEval"

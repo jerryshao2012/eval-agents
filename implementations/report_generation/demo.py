@@ -8,18 +8,14 @@ $ python -m implementations.report_generation.demo
 
 import asyncio
 import logging
+import sys
 import threading
 from functools import partial
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 import click
 import gradio as gr
-from aieng.agent_evals.async_client_manager import AsyncClientManager
-from aieng.agent_evals.db_manager import DbManager
-from aieng.agent_evals.langfuse import report_usage_scores
-from aieng.agent_evals.report_generation.agent import get_report_generation_agent
-from aieng.agent_evals.report_generation.evaluation.online import report_final_response_score
-from aieng.agent_evals.report_generation.prompts import MAIN_AGENT_INSTRUCTIONS
 from dotenv import load_dotenv
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.runners import Runner
@@ -27,23 +23,33 @@ from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 from gradio.components.chatbot import ChatMessage
 
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
+from aieng.agent_evals.async_client_manager import AsyncClientManager
+from aieng.agent_evals.db_manager import DbManager
+from aieng.agent_evals.langfuse import report_usage_scores
+from aieng.agent_evals.report_generation.agent import get_report_generation_agent
+from aieng.agent_evals.report_generation.evaluation.online import report_final_response_score
+from aieng.agent_evals.report_generation.prompts import MAIN_AGENT_INSTRUCTIONS
+
 from implementations.report_generation.env_vars import get_reports_output_path
 from implementations.report_generation.gradio_utils import agent_event_to_gradio_messages
-
 
 load_dotenv(verbose=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-
 GRADIO_STATE = gr.State(value={"trace_id": None})
 
 
 async def agent_session_handler(
-    query: str,
-    history: list[ChatMessage],
-    session_state: dict[str, Any],
-    enable_trace: bool = True,
+        query: str,
+        history: list[ChatMessage],
+        session_state: dict[str, Any],
+        enable_trace: bool = True,
 ) -> AsyncGenerator[list[ChatMessage], Any]:
     """Handle the agent session.
 
@@ -94,9 +100,9 @@ async def agent_session_handler(
 
     # Run the agent in streaming mode to get and display intermediate outputs
     async for event in runner.run_async(
-        user_id="user",
-        session_id=current_session.id,
-        new_message=content,
+            user_id="user",
+            session_id=current_session.id,
+            new_message=content,
     ):
         # Parse the stream events, convert to Gradio chat messages and append to
         # the chat history

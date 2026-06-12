@@ -42,15 +42,17 @@ https://archive.ics.uci.edu/static/public/352/online+retail.zip
 You can import the dataset to the database by running the script below:
 
 ```bash
-uv run --env-file .env python -m implementations.report_generation.data.import_online_retail_data --dataset-path <path_to_the_csv_file>
+uv run --env-file .env python -m implementations.report_generation.data.import_online_retail_data --dataset-path <path_to_the_downloade_zip_file>
 ```
 
-Replace `<path_to_the_csv_file>` with the path the dataset's .CSV file is saved in your machine.
+Replace `<path_to_the_downloade_zip_file>` with the path the dataset's .zip file is saved in your machine.
 
 ***NOTE:*** The location the database is saved is determined by an environment variable
 named `REPORT_GENERATION_DB__DATABASE`.
 
 ## Running the Demo UI
+
+Note: GOOGLE_API_KEY has to be set in the .env file
 
 To run the agent, please execute:
 
@@ -100,6 +102,8 @@ To upload custom data or use a different dataset name, please run:
 
 ```bash
 uv run --env-file .env python -m implementations.report_generation.data.langfuse_upload --dataset-path <path/to/dataset.json> --dataset-name <dataset name>
+
+uv run --env-file .env python -m implementations.report_generation.data.langfuse_upload --dataset-path implementations/report_generation/data/OnlineRetailReportEval.json --dataset-name OnlineRetailReportEval
 ```
 
 ### Running the Offline Evaluation Script
@@ -115,6 +119,9 @@ To run the offline evaluations against a custom dataset, please execute:
 
 ```bash
 uv run --env-file .env python -m implementations.report_generation.evaluate --dataset-name <dataset name>
+
+uv run --env-file .env python -m implementations.report_generation.evaluate --dataset-name OnlineRetailReportEval
+# 429 RESOURCE_EXHAUSTED
 ```
 
 This script will run the Report Generation Agent against each element of the dataset

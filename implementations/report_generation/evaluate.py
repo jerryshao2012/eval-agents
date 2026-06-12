@@ -9,14 +9,20 @@ $ python -m implementations.report_generation.evaluate \
 """
 
 import asyncio
+import sys
+from pathlib import Path
 
 import click
-from aieng.agent_evals.report_generation.evaluation.offline import evaluate
 from dotenv import load_dotenv
 
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
+from aieng.agent_evals.report_generation.evaluation.offline import evaluate
 from implementations.report_generation.data.langfuse_upload import DEFAULT_EVALUATION_DATASET_NAME
 from implementations.report_generation.env_vars import get_reports_output_path
-
 
 load_dotenv(verbose=True)
 

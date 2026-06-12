@@ -9,8 +9,15 @@ $ python -m implementations.report_generation.data.import_online_retail_data\
 
 import logging
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
 
 import click
 import pandas as pd
@@ -64,7 +71,27 @@ def import_online_retail_data(dataset_path: str) -> None:
 
     logger.info(f"Importing dataset from {dataset_path} to database at {db_path}")
 
-    df = pd.read_csv(dataset_path)
+    if dataset_path.endswith(".zip"):
+        logger.info("Dataset is a ZIP file. Attempting to read 'Online Retail.xlsx' from it.")
+        import zipfile
+        with zipfile.ZipFile(dataset_path, "r") as z:
+            # Look for an Excel file in the ZIP
+            excel_files = [f for f in z.namelist() if f.endswith(".xlsx") or f.endswith(".xls")]
+            if not excel_files:
+                # If no Excel file, maybe it's a CSV?
+                csv_files = [f for f in z.namelist() if f.endswith(".csv")]
+                if not csv_files:
+                    raise FileNotFoundError("No Excel or CSV file found in the ZIP archive")
+                with z.open(csv_files[0]) as f:
+                    df = pd.read_csv(f)
+            else:
+                with z.open(excel_files[0]) as f:
+                    df = pd.read_excel(f)
+    elif dataset_path.endswith(".xlsx") or dataset_path.endswith(".xls"):
+        df = pd.read_excel(dataset_path)
+    else:
+        df = pd.read_csv(dataset_path)
+
     df["InvoiceDate"] = df["InvoiceDate"].apply(convert_date)
     df.to_sql("sales", conn, if_exists="append", index=False)
 
@@ -72,20 +99,25 @@ def import_online_retail_data(dataset_path: str) -> None:
     logger.info(f"Dataset imported successfully to database at {db_path}")
 
 
-def convert_date(date_str: str) -> str | None:
+def convert_date(date_str: Any) -> Any:
     """Convert date from 'MM/DD/YY HH:MM' to 'YYYY-MM-DD HH:MM'.
 
     Parameters
     ----------
-    date_str : str
-        Date string in format 'MM/DD/YY HH:MM' or 'MM/DD/YY H:MM'.
+    date_str : Any
+        Date string or Timestamp.
         Example: "12/19/10 16:26" -> "2010-12-19 16:26".
 
     Returns
     -------
-    str | None
-        Converted date string in format 'YYYY-MM-DD HH:MM' or None if parsing fails.
+    Any
+        Converted date string or original value if not a string.
     """
+    if not isinstance(date_str, str):
+        if hasattr(date_str, "strftime"):
+            return date_str.strftime("%Y-%m-%d %H:%M")
+        return date_str
+
     if not is_date_in_format(date_str, "%m/%d/%y %H:%M") and not is_date_in_format(date_str, "%m/%d/%y H:%M"):
         return date_str
 
