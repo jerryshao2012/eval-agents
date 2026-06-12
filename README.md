@@ -39,7 +39,7 @@ cp -v .env.example .env
 Run integration tests to validate that your API keys are set up correctly.
 
 ```bash
-uv run --env-file .env pytest -sv tests/tool_tests/test_integration.py
+uv run --env-file .env pytest -sv aieng-eval-agents/tests/test_integration.py
 ```
 
 > **Note:** If your `.env` file is incomplete or needs to be updated, you can re-run onboarding manually from inside your Coder workspace (from the repo root):

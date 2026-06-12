@@ -92,11 +92,13 @@ class Configs(BaseSettings):
         default="https://generativelanguage.googleapis.com/v1beta/openai/",
         description="Base URL for OpenAI-compatible API (defaults to Gemini endpoint).",
     )
-    openai_api_key: SecretStr = Field(
+    openai_api_key: SecretStr | None = Field(
+        default=None,
         validation_alias=AliasChoices("OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
         description="API key for OpenAI-compatible API (accepts OPENAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY).",
     )
-    google_api_key: SecretStr = Field(
+    google_api_key: SecretStr | None = Field(
+        default=None,
         validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
         description="API key for Google/Gemini API (accepts GEMINI_API_KEY or GOOGLE_API_KEY).",
     )
@@ -138,7 +140,6 @@ class Configs(BaseSettings):
     # === Tracing (Langfuse) ===
     langfuse_public_key: str | None = Field(
         default=None,
-        pattern=r"^pk-lf-.*$",
         description="Langfuse public key for tracing (must start with 'pk-lf-').",
     )
     langfuse_secret_key: SecretStr | None = Field(
@@ -191,6 +192,14 @@ class Configs(BaseSettings):
         default=None,
         description="Path to the directory where the report generation agent will save the reports.",
     )
+
+    @field_validator("langfuse_public_key")
+    @classmethod
+    def validate_langfuse_public(cls, v: str | None) -> str | None:
+        """Validate that the Langfuse public key starts with 'pk-lf-' if provided."""
+        if v is not None and not v.startswith("pk-lf-"):
+            raise ValueError("Langfuse public key must start with 'pk-lf-'")
+        return v
 
     # Validators for the SecretStr fields
     @field_validator("langfuse_secret_key")
