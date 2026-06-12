@@ -25,16 +25,22 @@ Run with custom settings:
 import asyncio
 import logging
 import os
+import sys
 from pathlib import Path
 
 import click
+from langfuse.experiment import LocalExperimentItem
+from rich.logging import RichHandler
+
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
 from aieng.agent_evals.aml_investigation.agent import create_aml_investigation_agent
 from aieng.agent_evals.aml_investigation.data import AnalystOutput, CaseRecord
 from aieng.agent_evals.aml_investigation.task import AmlInvestigationTask
 from aieng.agent_evals.progress import create_progress
-from langfuse.experiment import LocalExperimentItem
-from rich.logging import RichHandler
-
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[RichHandler(show_path=False)], force=True)
 logger = logging.getLogger(__name__)
@@ -74,7 +80,7 @@ def _write_case_records(path: Path, records: list[CaseRecord]) -> None:
 
 
 def _merge_records_in_input_order(
-    input_records: list[CaseRecord], updates_by_id: dict[str, CaseRecord]
+        input_records: list[CaseRecord], updates_by_id: dict[str, CaseRecord]
 ) -> list[CaseRecord]:
     """Merge updates back into the original input order.
 
@@ -140,10 +146,10 @@ async def _run_case(task: AmlInvestigationTask, record: CaseRecord, semaphore: a
 
 
 async def run_cases(
-    input_path: Path = DEFAULT_INPUT_PATH,
-    output_path: Path | None = None,
-    max_concurrent_cases: int = DEFAULT_MAX_CONCURRENT_CASES,
-    resume: bool = True,
+        input_path: Path = DEFAULT_INPUT_PATH,
+        output_path: Path | None = None,
+        max_concurrent_cases: int = DEFAULT_MAX_CONCURRENT_CASES,
+        resume: bool = True,
 ) -> Path:
     """Run AML investigations for cases from an input JSONL file.
 

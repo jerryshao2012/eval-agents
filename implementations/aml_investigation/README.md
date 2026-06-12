@@ -77,6 +77,7 @@ This reads `aml_cases.jsonl`, runs the agent over any cases missing `output`, an
 
 ```bash
 uv run --env-file .env implementations/aml_investigation/cli.py
+# 429 RESOURCE_EXHAUSTED
 ```
 
 The script prints a simple confusion matrix for `is_laundering` based on the cases that have `output`.

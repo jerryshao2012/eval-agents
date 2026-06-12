@@ -19,11 +19,18 @@ Generate case files:
 import functools
 import logging
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any, Callable, get_args
 
 import click
 import pandas as pd
+
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
 from aieng.agent_evals.aml_investigation.data import (
     CaseRecord,
     IllicitRatios,
@@ -32,7 +39,6 @@ from aieng.agent_evals.aml_investigation.data import (
     download_dataset_file,
     normalize_transactions_data,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +178,8 @@ def cli() -> None:
     default=None,
     show_default=True,
     help="Optional path to the SQLite database file to create. If not provided, "
-    "the AML_DB__DATABASE environment variable will be checked. If neither is provided, "
-    "the database will be created in the same directory as the DDL file.",
+         "the AML_DB__DATABASE environment variable will be checked. If neither is provided, "
+         "the database will be created in the same directory as the DDL file.",
 )
 def create_db(illicit_ratio: str, transactions_size: str, ddl_file_path: Path, db_path: Path | None = None) -> None:
     """Create and populate the AML Fraud Investigation SQLite database.
@@ -262,14 +268,14 @@ def create_db(illicit_ratio: str, transactions_size: str, ddl_file_path: Path, d
     help="Directory to write case JSONL files.",
 )
 def create_cases(
-    illicit_ratio: str,
-    transactions_size: str,
-    num_laundering_cases: int,
-    num_normal_cases: int,
-    num_false_negative_cases: int,
-    num_false_positive_cases: int,
-    lookback_days: int,
-    output_dir: Path,
+        illicit_ratio: str,
+        transactions_size: str,
+        num_laundering_cases: int,
+        num_normal_cases: int,
+        num_false_negative_cases: int,
+        num_false_positive_cases: int,
+        lookback_days: int,
+        output_dir: Path,
 ) -> None:
     """Create AML case files as JSONL.
 

@@ -14,9 +14,18 @@ $ uv run --env-file .env implementations/aml_investigation/evaluate.py \
 
 import asyncio
 import logging
+import sys
 from functools import partial
+from pathlib import Path
 
 import click
+from rich.logging import RichHandler
+
+# Add aieng-eval-agents to sys.path if not already there to support running without installation
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if (ROOT_DIR / "aieng-eval-agents").exists() and str(ROOT_DIR / "aieng-eval-agents") not in sys.path:
+    sys.path.append(str(ROOT_DIR / "aieng-eval-agents"))
+
 from aieng.agent_evals.aml_investigation.agent import create_aml_investigation_agent
 from aieng.agent_evals.aml_investigation.graders import (
     item_level_deterministic_grader,
@@ -34,8 +43,6 @@ from aieng.agent_evals.evaluation.graders import (
 )
 from aieng.agent_evals.evaluation.graders.config import LLMRequestConfig
 from aieng.agent_evals.langfuse import upload_dataset_to_langfuse
-from rich.logging import RichHandler
-
 
 logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[RichHandler(show_path=False)], force=True)
 
@@ -90,14 +97,14 @@ logger = logging.getLogger(__name__)
     help="Maximum time in seconds to wait for trace data to be ready during evaluation.",
 )
 def cli(
-    dataset_path: str,
-    dataset_name: str,
-    llm_judge_timeout: int,
-    llm_judge_retries: int,
-    agent_timeout: int,
-    max_concurrent_cases: int,
-    max_concurrent_traces: int,
-    max_trace_wait_time: int,
+        dataset_path: str,
+        dataset_name: str,
+        llm_judge_timeout: int,
+        llm_judge_retries: int,
+        agent_timeout: int,
+        max_concurrent_cases: int,
+        max_concurrent_traces: int,
+        max_trace_wait_time: int,
 ) -> None:
     """Evaluate AML Investigation agent on a given dataset.
 
