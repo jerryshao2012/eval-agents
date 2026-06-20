@@ -7,6 +7,7 @@ CREATE TABLE "accounts" (
     "account_number" TEXT,
     "entity_id" TEXT,
     "entity_name" TEXT,
+    "entity_type" TEXT,
     PRIMARY KEY ("bank_id", "account_number")
 );
 

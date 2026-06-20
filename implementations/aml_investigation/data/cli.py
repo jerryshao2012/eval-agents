@@ -59,6 +59,9 @@ def _create_accounts_table(csv_filepath: str, conn: sqlite3.Connection) -> None:
         inplace=True,
     )
 
+    # Extract entity_type from entity_name (e.g., "Corporation #33520" -> "Corporation")
+    accts_df["entity_type"] = accts_df["entity_name"].str.split("#").str[0].str.strip()
+
     accts_df.to_sql("accounts", conn, if_exists="append", index=False)
 
 
