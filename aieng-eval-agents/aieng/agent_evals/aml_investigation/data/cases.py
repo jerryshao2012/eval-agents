@@ -25,7 +25,6 @@ from .utils import (
     apply_lookback_window,
 )
 
-
 logger = logging.getLogger(__name__)
 
 __all__ = ["LaunderingPattern", "GroundTruth", "CaseFile", "CaseRecord", "parse_patterns_file", "build_cases"]
@@ -154,7 +153,7 @@ def parse_patterns_file(path: str | Path, lookback_days: int = 0, min_timestamp:
                 continue
 
             if line.startswith(begin_prefix):
-                header = line[len(begin_prefix) :]
+                header = line[len(begin_prefix):]
                 current = _start_attempt_block(header)
                 continue
 
@@ -176,13 +175,13 @@ def parse_patterns_file(path: str | Path, lookback_days: int = 0, min_timestamp:
 
 
 def build_cases(
-    patterns_filepath: str | Path,
-    transactions: pd.DataFrame,
-    num_laundering_cases: int,
-    num_false_positive_cases: int,
-    num_false_negative_cases: int,
-    num_normal_cases: int,
-    lookback_days: int,
+        patterns_filepath: str | Path,
+        transactions: pd.DataFrame,
+        num_laundering_cases: int,
+        num_false_positive_cases: int,
+        num_false_negative_cases: int,
+        num_normal_cases: int,
+        lookback_days: int,
 ) -> list[CaseRecord]:
     """Build case files from laundering patterns and a transactions dataset.
 
@@ -239,9 +238,33 @@ def build_cases(
     rng = random.Random(42)
 
     all_attempts = parse_patterns_file(patterns_filepath, lookback_days=lookback_days, min_timestamp=min_timestamp)
-    rng.shuffle(all_attempts)
-    laundering_cases = all_attempts[:num_laundering_cases]
-    remaining_attempts = all_attempts[num_laundering_cases:]
+
+    # Stratified sampling of laundering typologies
+    laundering_types = [p for p in LaunderingPattern if p != LaunderingPattern.NONE]
+    attempts_by_type = {p: [] for p in laundering_types}
+    for attempt in all_attempts:
+        p_type = attempt.expected_output.pattern_type
+        if p_type in attempts_by_type:
+            attempts_by_type[p_type].append(attempt)
+
+    for p_type in attempts_by_type:
+        rng.shuffle(attempts_by_type[p_type])
+
+    laundering_cases = []
+    idx = 0
+    added = True
+    while len(laundering_cases) < num_laundering_cases and added:
+        added = False
+        for p_type in laundering_types:
+            if len(laundering_cases) >= num_laundering_cases:
+                break
+            if idx < len(attempts_by_type[p_type]):
+                laundering_cases.append(attempts_by_type[p_type][idx])
+                added = True
+        idx += 1
+
+    selected_ids = {c.input.case_id for c in laundering_cases}
+    remaining_attempts = [a for a in all_attempts if a.input.case_id not in selected_ids]
 
     laundering_attempt_txn_ids: set[str] = set()
     for case in laundering_cases:
@@ -312,11 +335,11 @@ def _parse_attempt_transaction_line(line: str, line_number: int) -> dict[str, st
 
 
 def _compute_attempt_window_start(
-    *,
-    txns_sorted: list[dict[str, str]],
-    seed_timestamp: str,
-    lookback_days: int,
-    min_timestamp: str | None,
+        *,
+        txns_sorted: list[dict[str, str]],
+        seed_timestamp: str,
+        lookback_days: int,
+        min_timestamp: str | None,
 ) -> str:
     """Compute an attempt window start and avoid zero-width windows when possible."""
     window_start = apply_lookback_window(txns_sorted[0]["timestamp"], lookback_days, min_timestamp=min_timestamp)
@@ -336,7 +359,7 @@ def _compute_attempt_window_start(
 
 
 def _finalize_attempt_block(
-    current: dict[str, Any], lookback_days: int, min_timestamp: str | None
+        current: dict[str, Any], lookback_days: int, min_timestamp: str | None
 ) -> CaseRecord | None:
     """Convert an in-progress attempt block into a CaseRecord if it has transactions."""
     txns: list[dict[str, str]] = current.get("transactions") or []
@@ -371,7 +394,7 @@ def _finalize_attempt_block(
 
 
 def _build_false_negative_cases(
-    remaining_attempts: list[CaseRecord], num_false_negative_cases: int, laundering_attempt_txn_ids: set[str]
+        remaining_attempts: list[CaseRecord], num_false_negative_cases: int, laundering_attempt_txn_ids: set[str]
 ) -> list[CaseRecord]:
     """Create false negative cases from remaining attempts or sampled transactions."""
     false_negative_cases: list[CaseRecord] = []
@@ -427,7 +450,7 @@ def _build_false_positive_cases(transc_df: pd.DataFrame, num_false_positive_case
     for _, window in top_windows.iterrows():
         window_txns = benign_df[
             (benign_df["from_account"] == window["from_account"]) & (benign_df["date"] == window["date"])
-        ].sort_values("timestamp")
+            ].sort_values("timestamp")
         if window_txns.empty:
             continue
         seed_row = window_txns.iloc[-1]
@@ -450,11 +473,11 @@ def _build_false_positive_cases(transc_df: pd.DataFrame, num_false_positive_case
 
 
 def _build_normal_cases(
-    transc_df: pd.DataFrame,
-    num_normal_cases: int,
-    fp_seed_ids: set[str],
-    lookback_days: int,
-    min_timestamp: str | None,
+        transc_df: pd.DataFrame,
+        num_normal_cases: int,
+        fp_seed_ids: set[str],
+        lookback_days: int,
+        min_timestamp: str | None,
 ) -> list[CaseRecord]:
     """Create normal (benign) cases from the transaction pool."""
     normal_cases: list[CaseRecord] = []

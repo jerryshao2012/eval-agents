@@ -96,6 +96,16 @@ logger = logging.getLogger(__name__)
     default=300,
     help="Maximum time in seconds to wait for trace data to be ready during evaluation.",
 )
+@click.option(
+    "--mask-trigger",
+    is_flag=True,
+    help="Mask the trigger_label passed to the agent with UNKNOWN.",
+)
+@click.option(
+    "--deterministic-only",
+    is_flag=True,
+    help="Only run deterministic evaluations, bypassing LLM-as-a-judge.",
+)
 def cli(
         dataset_path: str,
         dataset_name: str,
@@ -105,6 +115,8 @@ def cli(
         max_concurrent_cases: int,
         max_concurrent_traces: int,
         max_trace_wait_time: int,
+        mask_trigger: bool,
+        deterministic_only: bool,
 ) -> None:
     """Evaluate AML Investigation agent on a given dataset.
 
@@ -126,6 +138,10 @@ def cli(
         Maximum number of concurrent traces to process during evaluation.
     max_trace_wait_time : int
         Maximum time in seconds to wait for trace data to be ready during evaluation.
+    mask_trigger : bool
+        Whether to mask the trigger label in case input.
+    deterministic_only : bool
+        Whether to skip LLM judge evaluations and run deterministic metrics only.
     """
     # Create console for rich formatted output
     console = create_console(force_jupyter=False)
@@ -134,29 +150,35 @@ def cli(
     asyncio.run(upload_dataset_to_langfuse(dataset_path, dataset_name))
 
     # Define graders/evaluators
-    # Item-level LLM-as-a-judge evaluator assesses the quality of the agent's
-    # narrative output based on a rubric.
-    narrative_quality_evaluator = create_llm_as_judge_evaluator(
-        name="narrative_quality",
-        rubric_markdown="implementations/aml_investigation/rubrics/narrative_pattern_quality.md",
-        model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries),
-    )
+    evaluators = [item_level_deterministic_grader]
+    if not deterministic_only:
+        # Item-level LLM-as-a-judge evaluator assesses the quality of the agent's
+        # narrative output based on a rubric.
+        narrative_quality_evaluator = create_llm_as_judge_evaluator(
+            name="narrative_quality",
+            rubric_markdown="implementations/aml_investigation/rubrics/narrative_pattern_quality.md",
+            model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries),
+        )
+        evaluators.append(narrative_quality_evaluator)
 
     # Trace-level graders assess the correctness of tool use and the groundedness
     # of the agent's response based on trace data.
     db_policy = DbManager().aml_db().policy
     deterministic_trace_grader = partial(trace_deterministic_grader, db_policy=db_policy)
-    trace_groundedness_evaluator = create_trace_groundedness_evaluator(
-        model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries)
-    )
+    trace_evaluators = [deterministic_trace_grader]
+    if not deterministic_only:
+        trace_groundedness_evaluator = create_trace_groundedness_evaluator(
+            model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries)
+        )
+        trace_evaluators.append(trace_groundedness_evaluator)
 
     agent = create_aml_investigation_agent(timeout_sec=agent_timeout)
     results = run_experiment_with_trace_evals(
         dataset_name=dataset_name,
         name="AML Investigation Evaluation",
-        task=AmlInvestigationTask(agent=agent),
-        evaluators=[item_level_deterministic_grader, narrative_quality_evaluator],
-        trace_evaluators=[deterministic_trace_grader, trace_groundedness_evaluator],
+        task=AmlInvestigationTask(agent=agent, mask_trigger_label=mask_trigger),
+        evaluators=evaluators,
+        trace_evaluators=trace_evaluators,
         run_evaluators=[run_level_grader],
         max_concurrency=max_concurrent_cases,
         trace_max_concurrency=max_concurrent_traces,

@@ -85,9 +85,10 @@ class AmlInvestigationTask:
     >>> task = AmlInvestigationTask(agent=custom_agent)
     """
 
-    def __init__(self, *, agent: LlmAgent | None = None) -> None:
+    def __init__(self, *, agent: LlmAgent | None = None, mask_trigger_label: bool = False) -> None:
         """Initialize the AML task with an agent and runner."""
         self._agent = agent or create_aml_investigation_agent()
+        self.mask_trigger_label = mask_trigger_label
         self._runner = Runner(
             app_name="aml_investigation",
             agent=self._agent,
@@ -125,6 +126,18 @@ class AmlInvestigationTask:
         direct ``json.loads`` parse and validates the resulting object.
         """
         item_input = item.get("input") if isinstance(item, dict) else item.input
+        if self.mask_trigger_label:
+            # Create a shallow copy to modify trigger_label without affecting source
+            if isinstance(item_input, dict):
+                item_input = dict(item_input)
+                item_input["trigger_label"] = "UNKNOWN"
+            elif hasattr(item_input, "model_copy"):
+                item_input = item_input.model_copy(update={"trigger_label": "UNKNOWN"})
+            elif hasattr(item_input, "__dict__"):
+                import copy
+                item_input = copy.copy(item_input)
+                item_input.trigger_label = "UNKNOWN"
+
         serialized_input = json.dumps(item_input, ensure_ascii=False, indent=2)
         message = types.Content(parts=[types.Part(text=serialized_input)], role="user")
 
