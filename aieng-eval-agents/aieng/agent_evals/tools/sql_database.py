@@ -314,6 +314,90 @@ class ReadOnlySqlDatabase:
             }
             logger.debug("AUDIT: %s", log_entry)
 
+    def get_counterparty_graph(self, account_id: str, max_depth: int = 2) -> str:
+        """Traverse transactions to build a counterparty graph around a seed account.
+
+        Parameters
+        ----------
+        account_id : str
+            The root account to start the traversal from.
+        max_depth : int, default=2
+            Maximum number of hops to traverse.
+
+        Returns
+        -------
+        str
+            A markdown-formatted summary of nodes (accounts) and edges (transaction summaries).
+        """
+        visited_nodes = set()
+        queue = [(account_id, 0)]
+        nodes_info = {}  # account_id -> {entity_type, entity_name}
+        edges = {}  # (from_acc, to_acc) -> {count, total_amount, currencies}
+
+        def get_account_meta(acc_id):
+            if acc_id in nodes_info:
+                return
+            try:
+                q = text("SELECT entity_name, entity_type FROM accounts WHERE account_number = :acc")
+                with self.engine.connect() as conn:
+                    res = conn.execute(q, {"acc": acc_id}).fetchone()
+                    if res:
+                        nodes_info[acc_id] = {"entity_name": res[0], "entity_type": res[1]}
+                    else:
+                        nodes_info[acc_id] = {"entity_name": "Unknown", "entity_type": "Unknown"}
+            except Exception:
+                nodes_info[acc_id] = {"entity_name": "Error", "entity_type": "Error"}
+
+        while queue and len(visited_nodes) < 30:
+            curr_acc, depth = queue.pop(0)
+            if curr_acc in visited_nodes or depth > max_depth:
+                continue
+            visited_nodes.add(curr_acc)
+            get_account_meta(curr_acc)
+
+            if depth >= max_depth:
+                continue
+
+            try:
+                q = text("SELECT transaction_id, from_account, to_account, amount_paid, payment_currency FROM transactions WHERE from_account = :acc OR to_account = :acc LIMIT 50")
+                with self.engine.connect() as conn:
+                    res = conn.execute(q, {"acc": curr_acc}).fetchall()
+
+                for txn_id, from_acc, to_acc, amount, currency in res:
+                    if not from_acc or not to_acc:
+                        continue
+                    edge_key = (from_acc, to_acc)
+                    if edge_key not in edges:
+                        edges[edge_key] = {"count": 0, "amount": 0.0, "currencies": set(), "txns": []}
+                    edges[edge_key]["count"] += 1
+                    edges[edge_key]["amount"] += float(amount or 0)
+                    if currency:
+                        edges[edge_key]["currencies"].add(currency)
+                    edges[edge_key]["txns"].append(txn_id)
+
+                    next_node = to_acc if from_acc == curr_acc else from_acc
+                    if next_node not in visited_nodes:
+                        queue.append((next_node, depth + 1))
+            except Exception as e:
+                return f"Error building graph traversal: {e}"
+
+        output = [f"### Counterparty Graph Summary for Account: {account_id} (Max Depth: {max_depth})"]
+        output.append("\n#### Node Information (Accounts):")
+        output.append("| Account ID | Entity Name | Entity Type |")
+        output.append("| --- | --- | --- |")
+        for node_id, meta in sorted(nodes_info.items()):
+            output.append(f"| {node_id} | {meta['entity_name']} | {meta['entity_type']} |")
+
+        output.append("\n#### Edge Information (Aggregated Flows):")
+        output.append("| From Account | To Account | Tx Count | Total Volume | Currencies | Txn IDs (sample) |")
+        output.append("| --- | --- | --- | --- | --- | --- |")
+        for (from_acc, to_acc), info in sorted(edges.items()):
+            cur_str = ",".join(sorted(info["currencies"]))
+            txn_sample = ",".join(info["txns"][:3]) + ("..." if len(info["txns"]) > 3 else "")
+            output.append(f"| {from_acc} | {to_acc} | {info['count']} | {info['amount']:.2f} | {cur_str} | {txn_sample} |")
+
+        return "\n".join(output)
+
     def close(self) -> None:
         """Dispose of the connection pool."""
         self.engine.dispose(close=True)

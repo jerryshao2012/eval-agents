@@ -17,6 +17,7 @@ import logging
 import sys
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.logging import RichHandler
@@ -35,7 +36,7 @@ from aieng.agent_evals.aml_investigation.graders import (
 from aieng.agent_evals.aml_investigation.task import AmlInvestigationTask
 from aieng.agent_evals.db_manager import DbManager
 from aieng.agent_evals.display import create_console, display_info, display_metrics_table
-from aieng.agent_evals.evaluation import TraceWaitConfig
+from aieng.agent_evals.evaluation import TraceWaitConfig, Evaluation
 from aieng.agent_evals.evaluation.experiment import run_experiment_with_trace_evals
 from aieng.agent_evals.evaluation.graders import (
     create_llm_as_judge_evaluator,
@@ -49,8 +50,46 @@ logging.basicConfig(level=logging.INFO, format="%(message)s", handlers=[RichHand
 # Silence verbose INFO logs from Google ADK
 logging.getLogger("google_adk").setLevel(logging.WARNING)
 
-logger = logging.getLogger(__name__)
+def _get_val(obj, key):
+    if hasattr(obj, key):
+        return getattr(obj, key)
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return None
 
+def seed_transaction_flagged_grader(
+    input: Any,  # noqa: A002
+    output: Any,
+    expected_output: Any,
+    metadata: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> list[Evaluation]:
+    from typing import Any
+    del expected_output, metadata, kwargs
+
+    predicted_is_laundering = _get_val(output, "is_laundering")
+    predicted_ids_str = _get_val(output, "flagged_transaction_ids") or ""
+    predicted_ids = {
+        token.strip()
+        for token in str(predicted_ids_str).split(",")
+        if token.strip()
+    }
+    seed_id = _get_val(input, "seed_transaction_id")
+
+    applicable = predicted_is_laundering is True
+    passed = (seed_id in predicted_ids) if applicable else True
+
+    return [
+        Evaluation(
+            name="seed_transaction_flagged",
+            value=1.0 if passed else 0.0,
+            metadata={"applicable": applicable, "seed_transaction_id": seed_id},
+        )
+    ]
+
+
+
+logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option(
@@ -150,7 +189,7 @@ def cli(
     asyncio.run(upload_dataset_to_langfuse(dataset_path, dataset_name))
 
     # Define graders/evaluators
-    evaluators = [item_level_deterministic_grader]
+    evaluators = [item_level_deterministic_grader, seed_transaction_flagged_grader]
     if not deterministic_only:
         # Item-level LLM-as-a-judge evaluator assesses the quality of the agent's
         # narrative output based on a rubric.
@@ -159,7 +198,12 @@ def cli(
             rubric_markdown="implementations/aml_investigation/rubrics/narrative_pattern_quality.md",
             model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries),
         )
-        evaluators.append(narrative_quality_evaluator)
+        benign_hypothesis_evaluator = create_llm_as_judge_evaluator(
+            name="benign_hypothesis_quality",
+            rubric_markdown="implementations/aml_investigation/rubrics/benign_hypothesis_quality.md",
+            model_config=LLMRequestConfig(timeout_sec=llm_judge_timeout, retry_max_attempts=llm_judge_retries),
+        )
+        evaluators.extend([narrative_quality_evaluator, benign_hypothesis_evaluator])
 
     # Trace-level graders assess the correctness of tool use and the groundedness
     # of the agent's response based on trace data.
@@ -225,6 +269,93 @@ def cli(
             "Failed Traces": len(results.trace_evaluations.failed_trace_ids),
         }
         display_metrics_table(metrics=trace_summary, title="Trace Processing", console=console)
+
+    # Display slice-based reporting
+    import collections
+    from rich.table import Table
+
+    console.print("\n[bold yellow]🍰 Slice-Based Performance Reporting[/bold yellow]\n")
+
+    pattern_slices = collections.defaultdict(list)
+    trigger_slices = collections.defaultdict(list)
+
+    for item_result in results.experiment.item_results:
+        is_laundering_eval = next((e for e in item_result.evaluations if e.name == "is_laundering_correct"), None)
+        if not is_laundering_eval or not is_laundering_eval.metadata:
+            continue
+
+        expected = is_laundering_eval.metadata.get("expected")
+        actual = is_laundering_eval.metadata.get("actual")
+
+        item_obj = item_result.item
+        pattern_type = "UNKNOWN"
+        trigger_label = "UNKNOWN"
+        
+        def _extract_field(obj, key):
+            if obj is None:
+                return None
+            if isinstance(obj, dict):
+                return obj.get(key)
+            if hasattr(obj, key):
+                return getattr(obj, key)
+            return None
+
+        if item_obj:
+            inp = _extract_field(item_obj, "input")
+            expected_out = _extract_field(item_obj, "expected_output")
+            
+            p_type = _extract_field(expected_out, "pattern_type")
+            t_label = _extract_field(inp, "trigger_label")
+            
+            if p_type:
+                pattern_type = p_type
+            if t_label:
+                trigger_label = t_label
+
+        if hasattr(pattern_type, "name"):
+            pattern_type = getattr(pattern_type, "name")
+        if hasattr(trigger_label, "name"):
+            trigger_label = getattr(trigger_label, "name")
+
+        pattern_slices[str(pattern_type)].append((expected, actual))
+        trigger_slices[str(trigger_label)].append((expected, actual))
+
+    def display_slice_table(slices, title):
+        table = Table(title=title)
+        table.add_column("Slice Key", justify="left", style="cyan")
+        table.add_column("Count", justify="right")
+        table.add_column("TP/FP/FN/TN", justify="center")
+        table.add_column("Precision", justify="right")
+        table.add_column("Recall", justify="right")
+        table.add_column("F1", justify="right")
+
+        for name, pairs in sorted(slices.items()):
+            tp = fp = fn = tn = 0
+            for exp_, act_ in pairs:
+                if exp_ and act_:
+                    tp += 1
+                elif (not exp_) and act_:
+                    fp += 1
+                elif exp_ and (not act_):
+                    fn += 1
+                else:
+                    tn += 1
+            prec = float(tp) / (tp + fp) if (tp + fp) > 0 else 0.0
+            rec = float(tp) / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2.0 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+            table.add_row(
+                name,
+                str(len(pairs)),
+                f"{tp}/{fp}/{fn}/{tn}",
+                f"{prec:.2f}",
+                f"{rec:.2f}",
+                f"{f1:.2f}"
+            )
+        console.print(table)
+        console.print("")
+
+    display_slice_table(pattern_slices, "Performance by Ground-Truth Typology")
+    display_slice_table(trigger_slices, "Performance by Trigger Label")
 
     display_info("Evaluation complete! Results have been uploaded to Langfuse.", console=console)
 

@@ -95,7 +95,8 @@ def generate_spot_check(
             f.write("| Criterion | Score (1-5) | Evidence / Notes |\n")
             f.write("| --- | --- | --- |\n")
             f.write("| `summary_narrative_quality` | | |\n")
-            f.write("| `pattern_description_quality` | | |\n\n")
+            f.write("| `pattern_description_quality` | | |\n")
+            f.write("| `benign_hypothesis_quality` | | |\n\n")
             f.write("---\n\n")
 
     print(f"✅ Manual review template written to {report_path}")

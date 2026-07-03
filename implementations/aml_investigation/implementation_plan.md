@@ -1,60 +1,64 @@
-# Implementation Plan - AML Investigation Day 3 Experiments
+# Implementation Plan - AML Investigation Day 3 Experiments & Enhancements
 
-This plan outlines the steps to execute two high-value experiments and a manual validation workflow for the AML Investigation Agent, focusing on deterministic metrics and avoiding LLM-as-a-judge APIs.
+This plan outlines the steps to execute Day 3 experiments, implement new domain metrics, and upgrade the agent's graph-traversal capabilities.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> - We will modify the codebase to support stratified/balanced case sampling to guarantee all 9 typologies (8 laundering typologies + NONE) are represented.
-> - We will add an option to mask the `trigger_label` input in the agent task to run the exploitability study.
-> - LLM-as-a-judge components (`narrative_quality` and `trace_groundedness`) will be bypassed to save API cost and speed up runs, relying on deterministic metrics.
+> - We will implement a new counterparty graph traversal tool (`get_counterparty_graph`) to prevent the agent from burning its query budget on raw SQL calls.
+> - We will add new metrics: a deterministic `seed_transaction_flagged` metric and an LLM-judge-based `benign_hypothesis_quality` metric.
+> - We will implement slice-based reporting (slicing performance by ground-truth typology and trigger label) in the evaluation script.
+
+---
 
 ## Proposed Changes
 
-We will introduce changes to the dataset generation code to balance typologies, update the task wrapper to allow masking, and run the comparative evaluation.
+### [Component 1: Stratified Case Generation (Experiment A)] (Completed)
+- **Modify** `cases.py`: Updated `build_cases` to sample laundering typologies using a stratified/balanced method.
+- **Run CLI**: Generated a balanced dataset of 72 cases.
+
+### [Component 2: Trigger Label Masking (Experiment B)] (Completed)
+- **Modify** `task.py` and `evaluate.py`: Added support for masking `trigger_label` with `"UNKNOWN"`.
 
 ---
 
-### [Component 1: Stratified Case Generation (Experiment A)]
+### [Component 3: Graph Tooling Upgrade]
 
-#### [MODIFY] [cases.py](../../aieng-eval-agents/aieng/agent_evals/aml_investigation/data/cases.py)
-Update `build_cases` to support stratified sampling of the 8 laundering typologies. Instead of a simple slice from shuffled attempts, it will group the attempts by their `pattern_type` and sample an equal number of cases from each typology to guarantee complete representation and balance.
+#### [NEW] [graph.py](../../aieng-eval-agents/aieng/agent_evals/aml_investigation/tools/graph.py)
+Implement a graph traversal tool:
+```python
+def get_counterparty_graph(account_id: str, direction: str = "both", max_depth: int = 2) -> str:
+    """Traverse the transaction history to build a counterparty graph up to max_depth.
+    Returns a list of nodes and edges with transaction counts and total volume.
+    """
+```
 
-#### [RUN COMMAND] Generate Larger, Balanced Dataset
-Run the CLI to generate a balanced case file (e.g. 5 cases for each of the 8 typologies, plus matching normal/false-positive/false-negative cases).
+#### [MODIFY] [agent.py](../../aieng-eval-agents/aieng/agent_evals/aml_investigation/agent.py)
+- Register `get_counterparty_graph` in the agent's toolset.
+- Update the system instructions (`ANALYST_PROMPT`) to explain how to use the graph tool for multi-hop investigations (e.g. STACK, CYCLE, GATHER-SCATTER).
 
 ---
 
-### [Component 2: Trigger Label Masking & Deterministic Evaluation (Experiment B)]
+### [Component 4: New Domain Metrics & Slice-Based Reporting]
 
-#### [MODIFY] [task.py](../../aieng-eval-agents/aieng/agent_evals/aml_investigation/task.py)
-Add a `mask_trigger_label` boolean parameter to `AmlInvestigationTask`. When `True`, the `trigger_label` in the input passed to the agent is replaced with `"UNKNOWN"`.
+#### [NEW] [benign_hypothesis_quality.md](rubrics/benign_hypothesis_quality.md)
+Create a scoring rubric for benign justification.
 
 #### [MODIFY] [evaluate.py](evaluate.py)
-Modify the evaluation script to:
-1. Accept a `--mask-trigger` CLI option.
-2. Accept a `--deterministic-only` CLI option that disables `narrative_quality_evaluator` and `trace_groundedness_evaluator` (bypassing LLM-as-a-judge).
+- Add `seed_transaction_flagged_grader` to the item-level evaluators.
+- Add `benign_hypothesis_quality` (LLM-as-a-judge) evaluator.
+- Add slice-based reporting at the end of the evaluation script (slicing F1/precision/recall by ground-truth typology and trigger label).
 
 ---
 
-### [Component 3: Manual Judge Validation Workflow]
-
-#### [NEW] [manual_spot_check.py](manual_spot_check.py)
-Create a quick utility script to extract a random sample of 5-10 completed cases from the output JSONL file, print their `summary_narrative` and `pattern_description` alongside the rubric in [narrative_pattern_quality.md](rubrics/narrative_pattern_quality.md), and provide a simple markdown template for manual scoring.
+### [Component 5: Manual Judge Validation Workflow] (Completed)
+- Created `manual_spot_check.py` to extract random narrative samples and generate review reports.
 
 ## Verification Plan
 
 ### Automated Tests
-- Run `evaluate.py` twice on the newly balanced dataset:
-  1. Baseline run (intact trigger labels, deterministic metrics only):
-     ```bash
-     uv run --env-file .env implementations/aml_investigation/evaluate.py --dataset-path implementations/aml_investigation/data/aml_cases.jsonl --dataset-name AML-balanced-baseline --deterministic-only
-     ```
-  2. Exploitability run (masked trigger labels, deterministic metrics only):
-     ```bash
-     uv run --env-file .env implementations/aml_investigation/evaluate.py --dataset-path implementations/aml_investigation/data/aml_cases.jsonl --dataset-name AML-balanced-masked --deterministic-only --mask-trigger
-     ```
-- Compare F1-scores, precision, recall, and macro-F1 of pattern types between both runs.
-
-### Manual Verification
-- Execute the spot-check utility to generate a review template for manual evaluation of the narrative quality.
+- Run baseline and masked evaluations with the new metrics and tools enabled:
+  ```bash
+  uv run --env-file .env implementations/aml_investigation/evaluate.py --dataset-path implementations/aml_investigation/data/aml_cases.jsonl --dataset-name AML-enhanced --deterministic-only
+  ```
+- Verify that the slice-based reporting output matches the typologies and trigger labels.

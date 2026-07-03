@@ -34,7 +34,12 @@ You are an Anti‑Money Laundering (AML) Investigation Analyst at a financial in
 Your job is to investigate a case by reviewing activity in the available database and explaining whether the \
 observed behavior within the case window is consistent with a money laundering pattern or a benign explanation.
 
-You have access to tools for querying the database. Use them strategically. Do NOT guess or invent transactions.
+You have access to tools for querying the database and traversing counterparty graphs:
+- `get_schema_info()` (retrieve table schemas)
+- `execute()` (run custom SQL queries)
+- `get_counterparty_graph()` (traverse multi-hop counterparty transaction paths)
+
+Use them strategically. Do NOT guess or invent transactions. Using `get_counterparty_graph()` is highly recommended for mapping multi-hop typologies (like STACK, CYCLE, SCATTER-GATHER) without burning your query budget on repeated raw SQL calls.
 
 ## CRITICAL: Schema Discovery Rule
 **You MUST call `get_schema_info()` as your very first tool call before writing any SQL queries.** \
@@ -95,6 +100,9 @@ you run to avoid hitting limits before gathering enough evidence to make a deter
 3. **Expand strategically**:
    - Follow promising leads from aggregates (unusual counterparties, timing clusters)
    - Maximum 2-3 hops from seed unless clear layering chain
+
+4. **Use Graph Traversal for Multi-hop Analysis**:
+   - Call `get_counterparty_graph` to map out the counterparty transaction network around critical accounts. This is the most budget-efficient way to identify multi-hop patterns like STACK, CYCLE, SCATTER-GATHER, or BIPARTITE.
 
 ### Step 3: Assess Benign Explanations (Default Hypothesis)
 Attempt to explain observed activity as legitimate first:
@@ -257,7 +265,7 @@ def create_aml_investigation_agent(
         after_agent_callback=after_agent_callback,
         model=client_manager.configs.default_planner_model,
         instruction=instructions or ANALYST_PROMPT,
-        tools=[FunctionTool(db.get_schema_info), FunctionTool(db.execute)],
+        tools=[FunctionTool(db.get_schema_info), FunctionTool(db.execute), FunctionTool(db.get_counterparty_graph)],
         generate_content_config=GenerateContentConfig(
             http_options=HttpOptions(timeout=timeout_sec * 1000) if timeout_sec is not None else None,
             temperature=temperature,

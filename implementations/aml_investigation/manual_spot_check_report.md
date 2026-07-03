@@ -63,6 +63,7 @@ One source account ('80C8966E0') made 8 payments to 8 distinct destination accou
 | --- | --- | --- |
 | `summary_narrative_quality` | 5 | Coherent, evidence-grounded logic. Cites the lack of incoming funds as a counter-indicator to a benign partnership model. |
 | `pattern_description_quality` | 5 | Very clear description of the flow shape (1-to-many), actors (Partnership to 8 counterparties), and timeline. |
+| `benign_hypothesis_quality` | 5 | Coherent benign justification. Explicitly discusses why partnership models lack expected inflows to support benign activities. |
 
 ---
 
@@ -90,6 +91,7 @@ Within the 7-day investigation window, the central account 80B18E250, belonging 
 | --- | --- | --- |
 | `summary_narrative_quality` | 1 | **Hard Floor Violated**: The narrative concludes "no money laundering is suspected" (consistent with `is_laundering = False`), but the agent set `pattern_type = FAN_IN` (contradicting the NONE instruction for benign cases). |
 | `pattern_description_quality` | 1 | **Hard Floor Violated**: Setting `pattern_type` to `FAN_IN` while ruling out money laundering is semantically inconsistent. |
+| `benign_hypothesis_quality` | 5 | Excellent corporate cash inflows benign rationale, though the output fields are inconsistent. |
 
 ---
 
@@ -117,6 +119,7 @@ Multiple source accounts send funds to a single destination account (80A633EB0),
 | --- | --- | --- |
 | `summary_narrative_quality` | 4 | Solid reasoning grounded in structured, repetitive inflow amounts. Coherent with the agent's verdict of `FAN_IN`. |
 | `pattern_description_quality` | 5 | Accurately describes the aggregation flow shape, actor entities, and structured deposits. |
+| `benign_hypothesis_quality` | 4 | States benign is unlikely due to lack of business outflows, but could discuss business model characteristics of sole proprietorships further. |
 
 ---
 
@@ -144,6 +147,7 @@ Account 811B6E170 exhibits a clear GATHER-SCATTER pattern. From September 2nd to
 | --- | --- | --- |
 | `summary_narrative_quality` | 2 | Extremely generic. Narrative cites no transaction counts, dates, or values, relying entirely on qualitative summaries. |
 | `pattern_description_quality` | 5 | Excellent. The agent put all the specific evidence, timelines (Sept 2 - 14 vs Sept 1 - 17), and exact transaction volumes/counts in the description. |
+| `benign_hypothesis_quality` | 1 | Completely lacks benign hypothesis analysis or reasoning; only states benign behavior is not consistent. |
 
 ---
 
@@ -171,6 +175,7 @@ The source account, a Sole Proprietorship, made 16 payments to 16 distinct count
 | --- | --- | --- |
 | `summary_narrative_quality` | 5 | Coherent and grounded reasoning. Properly details why a Sole Proprietorship making outgoing payments is benign vendor activity. |
 | `pattern_description_quality` | 5 | Explains both the physical structure of the flow (fan-out) and the semantic justification for why it's consistent with normal operations. |
+| `benign_hypothesis_quality` | 5 | Excellent vendor payments benign justification for a Sole Proprietorship model. |
 
 ---
 
